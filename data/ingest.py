@@ -66,8 +66,9 @@ def main():
 
     # Upload to Pinecone
     pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_API_ENV)
-    pinecone.create_index("yogi", dimension=1536, metric="cosine")
-    docsearch = upload_to_pinecone(texts, embeddings, "yogi")
+    # pinecone.create_index("yogi", dimension=1536, metric="cosine")
+    # docsearch = upload_to_pinecone(texts, embeddings, "yogi")
+    docsearch = Pinecone.from_existing_index("yogi", embeddings)
 
     # Search documents
     query = "What are the three levels of vairagya?"
