@@ -33,7 +33,7 @@ export async function getChats(userId?: string | null) {
 export async function getChat(id: string, userId: string) {
   const chat = await kv.hgetall<Chat>(`chat:${id}`)
 
-  if (!chat || (userId && chat.userId !== userId)) {
+  if (!chat || (userId && chat.userId.toString().slice(0, 16) !== userId?.toString().slice(0, 16))) {
     return null
   }
 
@@ -51,14 +51,14 @@ export async function removeChat({ id, path }: { id: string; path: string }) {
 
   const uid = await kv.hget<string>(`chat:${id}`, 'userId')
 
-  if (uid !== session?.user?.id) {
+  if (uid?.toString().slice(0, 16) !== session?.user.sub.toString().slice(0, 16)) {
     return {
       error: 'Unauthorized'
     }
   }
 
   await kv.del(`chat:${id}`)
-  await kv.zrem(`user:chat:${session.user.id}`, `chat:${id}`)
+  await kv.zrem(`user:chat:${(session.user.sub)}`, `chat:${id}`)
 
   revalidatePath('/')
   return revalidatePath(path)
@@ -67,13 +67,13 @@ export async function removeChat({ id, path }: { id: string; path: string }) {
 export async function clearChats() {
   const session = await auth()
 
-  if (!session?.user?.id) {
+  if (!(session?.user?.sub)) {
     return {
       error: 'Unauthorized'
     }
   }
 
-  const chats: string[] = await kv.zrange(`user:chat:${session.user.id}`, 0, -1)
+  const chats: string[] = await kv.zrange(`user:chat:${session.user.sub}`, 0, -1)
   if (!chats.length) {
     return redirect('/')
   }
@@ -81,7 +81,7 @@ export async function clearChats() {
 
   for (const chat of chats) {
     pipeline.del(chat)
-    pipeline.zrem(`user:chat:${session.user.id}`, chat)
+    pipeline.zrem(`user:chat:${session.user.sub}`, chat)
   }
 
   await pipeline.exec()
@@ -103,7 +103,7 @@ export async function getSharedChat(id: string) {
 export async function shareChat(chat: Chat) {
   const session = await auth()
 
-  if (!session?.user?.id || session.user.id !== chat.userId) {
+  if (!session.user.sub || session.user.sub.slice(0, 15) !== chat.userId.slice(0, 15)) {
     return {
       error: 'Unauthorized'
     }

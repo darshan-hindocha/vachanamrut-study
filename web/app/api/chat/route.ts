@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     })
   ])
   const { messages, previewToken } = json
-  const userId = (await auth())?.user.id
+  const userId = (await auth())?.user.sub
 
   if (!userId) {
     return new Response('Unauthorized', {
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
           ' - **[p. ' +
           document[0].metadata?.paragraph +
           ']** ' +
-          (document[1] < 0.6 ? '(Low relevance) ' : '') +
+          (document[1] < 0.8 ? '(Low relevance) ' : '') +
           document[0].pageContent +
           '\n\n'
       }
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
 
   const response = prompt
 
-  const title = json.messages[0].content.substring(0, 100)
+  const title = json.messages[0].content.substring(65, 120)
   const id = json.id ?? nanoid()
   const createdAt = Date.now()
   const path = `/chat/${id}`

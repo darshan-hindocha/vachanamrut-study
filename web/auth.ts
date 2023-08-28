@@ -6,7 +6,8 @@ declare module 'next-auth' {
   interface Session {
     user: {
       /** The user's id. */
-      id: string
+      id?: string
+      sub: string
     } & DefaultSession['user']
   }
 }
@@ -24,12 +25,6 @@ export const {
         token.image = profile.picture
       }
       return token
-    },
-    session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.sub as string;
-      }
-      return session
     },
     authorized({ auth }) {
       return !!auth?.user // this ensures there is a logged in user for -every- request
