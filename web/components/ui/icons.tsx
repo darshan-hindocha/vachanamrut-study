@@ -137,7 +137,7 @@ function IconGoogle({ className, ...props }: React.ComponentProps<'svg'>) {
         fill="currentColor"
       ></path>
     </svg>
-  );
+  )
 }
 
 function IconGitHub({ className, ...props }: React.ComponentProps<'svg'>) {

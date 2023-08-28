@@ -1,5 +1,8 @@
 import { auth } from '@/auth'
-import { LoginWithGoogleButton, LoginWithGithubButton } from '@/components/login-button'
+import {
+  LoginWithGoogleButton,
+  LoginWithGithubButton
+} from '@/components/login-button'
 import { redirect } from 'next/navigation'
 
 export default async function SignInPage() {
@@ -10,8 +13,8 @@ export default async function SignInPage() {
   }
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16))] items-center justify-center py-10">
-      <LoginWithGithubButton/>
-      <LoginWithGoogleButton/>
+      <LoginWithGithubButton />
+      <LoginWithGoogleButton />
     </div>
   )
 }

@@ -28,8 +28,7 @@ export function UserMenu({ user }: UserMenuProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="pl-0">
-            <div
-              className="flex items-center justify-center text-xs font-medium uppercase rounded-full select-none h-7 w-7 shrink-0 bg-muted/50 text-muted-foreground">
+            <div className="flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full bg-muted/50 text-xs font-medium uppercase text-muted-foreground">
               {user?.name ? getUserInitials(user?.name) : null}
             </div>
             <span className="ml-2">{user?.name}</span>
@@ -40,7 +39,7 @@ export function UserMenu({ user }: UserMenuProps) {
             <div className="text-xs font-medium">{user?.name}</div>
             <div className="text-xs text-zinc-500">{user?.email}</div>
           </DropdownMenuItem>
-          <DropdownMenuSeparator/>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() =>
               signOut({

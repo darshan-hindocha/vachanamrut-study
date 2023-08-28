@@ -1,15 +1,14 @@
 import { kv } from '@vercel/kv'
-import { OpenAIStream, StreamingTextResponse, } from 'ai'
+import { StreamingTextResponse } from 'ai'
 import { Configuration, OpenAIApi } from 'openai-edge'
 
 import { auth } from '@/auth'
 import { nanoid } from '@/lib/utils'
 
+import { OpenAIEmbeddings } from 'langchain/embeddings/openai'
+import { PineconeStore } from 'langchain/vectorstores/pinecone'
 
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
-import { PineconeStore } from "langchain/vectorstores/pinecone";
-
-import { PineconeClient } from "@pinecone-database/pinecone";
+import { PineconeClient } from '@pinecone-database/pinecone'
 
 export const runtime = 'edge'
 
@@ -17,44 +16,48 @@ const configuration = new Configuration({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-const pinecone = new PineconeClient();
+const pinecone = new PineconeClient()
 
+const openai = new OpenAIApi(configuration)
 
-const openai = new OpenAIApi(configuration);
-
-
-function sanitizeText(text) {
-  const replacements = {
-    'ā': 'a',
-    'ī': 'i',
-    'ū': 'u',
-    'ē': 'e',
-    'ō': 'o',
-    'ṃ': 'm',
-    'ṇ': 'n',
-    'ṛ': 'r',
-    'ṣ': 's',
-    'ś': 's',
-    'ṭ': 't',
-    'ḍ': 'd',
-    'ḥ': 'h',
-    'ḷ': 'l'
+function sanitizeText(text: string) {
+  const replacements: {
+    [key: string]: string
+  } = {
+    ā: 'a',
+    ī: 'i',
+    ū: 'u',
+    ē: 'e',
+    ō: 'o',
+    ṃ: 'm',
+    ṇ: 'n',
+    ṛ: 'r',
+    ṣ: 's',
+    ś: 's',
+    ṭ: 't',
+    ḍ: 'd',
+    ḥ: 'h',
+    ḷ: 'l'
     // Add more as needed
-  };
+  }
 
-  return text.replace(/ā|ī|ū|ē|ō|ṃ|ṇ|ṛ|ṣ|ś|ṭ|ḍ|ḥ|ḷ/g, match => replacements[match]);
+  // @ts-ignore-next-line
+  return text.replace(
+    /ā|ī|ū|ē|ō|ṃ|ṇ|ṛ|ṣ|ś|ṭ|ḍ|ḥ|ḷ/g,
+    match => replacements[match]
+  )
 }
 
 export async function POST(req: Request) {
   const [json, _] = await Promise.all([
     req.json(),
     pinecone.init({
-      environment: "us-west1-gcp",
-      apiKey: process.env.PINECONE_API_KEY,
+      environment: 'us-west1-gcp',
+      apiKey: process.env.PINECONE_API_KEY ?? ''
     })
-  ]);
+  ])
   const { messages, previewToken } = json
-  const userId = (await auth())?.user.id ?? (await auth())?.user.sub
+  const userId = (await auth())?.user.id
 
   if (!userId) {
     return new Response('Unauthorized', {
@@ -66,66 +69,79 @@ export async function POST(req: Request) {
     configuration.apiKey = previewToken
   }
 
-  console.log("pinecone initialized");
+  console.log('pinecone initialized')
 
-  const pineconeIndex = pinecone.Index("yogi");
+  const pineconeIndex = pinecone.Index('yogi')
 
   const vectorStore = await PineconeStore.fromExistingIndex(
     new OpenAIEmbeddings(),
     { pineconeIndex }
-  );
+  )
 
-  const similaritySearchResults = await vectorStore.similaritySearchWithScore(messages[messages.length - 1].content, 10)
-    .then((result) => {
-      return result;
-    });
+  const similaritySearchResults = await vectorStore
+    .similaritySearchWithScore(messages[messages.length - 1].content, 10)
+    .then(result => {
+      return result
+    })
 
   // Multi-string prompt
-  let prompt = "Here are the most relevant results I found for your query:\n\n";
+  let prompt = 'Here are the most relevant results I found for your query:\n\n'
 
   // Group data by metadata.title
   const groupedByTitle: {
-    [title: string]: [any, number][];
+    [title: string]: [any, number][]
   } = similaritySearchResults.reduce((acc, [item, score]) => {
-    const title = item.metadata.title;
+    const title: string = item.metadata.title
+    // @ts-ignore-next-line
     if (!acc[title]) {
-      acc[title] = [];
+      // @ts-ignore-next-line
+      acc[title] = []
     }
-    acc[title].push([item, score]);
-    return acc;
-  }, {});
+    // @ts-ignore-next-line
+    acc[title].push([item, score])
+    return acc
+  }, {})
 
   // Sort each group by metadata.paragraph
-  Object.keys(groupedByTitle).forEach((title) => {
+  Object.keys(groupedByTitle).forEach(title => {
     groupedByTitle[title].sort((a, b) => {
-      return a[0].metadata.paragraph - b[0].metadata.paragraph;
-    });
-  });
+      return a[0].metadata.paragraph - b[0].metadata.paragraph
+    })
+  })
 
-  let uniqueTextSet = new Set();
+  let uniqueTextSet = new Set()
 
   // Iterate over each title group
   Object.keys(groupedByTitle).forEach((title, groupIndex) => {
-    prompt += "#### " + groupedByTitle[title][0][0]?.metadata?.vachanamrut_number + ": " + title.replaceAll("\n", " ") + "\n";
+    prompt +=
+      '#### ' +
+      groupedByTitle[title][0][0]?.metadata?.vachanamrut_number +
+      ': ' +
+      title.replaceAll('\n', ' ') +
+      '\n'
 
     // Iterate over each document in the title group
     groupedByTitle[title].forEach((document, index) => {
-      const pageContent = document[0].pageContent;
-      const sanitizedContent = sanitizeText(pageContent);
+      const pageContent = document[0].pageContent
+      const sanitizedContent = sanitizeText(pageContent)
       if (!uniqueTextSet.has(sanitizedContent)) {
-        prompt += " - **[p. " + document[0].metadata?.paragraph + "]** " + (
-          (document[1] < 0.6) ? "(Low relevance) " : ""
-        ) + document[0].pageContent + "\n\n";
+        prompt +=
+          ' - **[p. ' +
+          document[0].metadata?.paragraph +
+          ']** ' +
+          (document[1] < 0.6 ? '(Low relevance) ' : '') +
+          document[0].pageContent +
+          '\n\n'
       }
-      uniqueTextSet.add(sanitizedContent);
-    });
+      uniqueTextSet.add(sanitizedContent)
+    })
 
-    prompt += '\n\n'; // Separator between groups
-  });
+    prompt += '\n\n' // Separator between groups
+  })
 
-  messages[messages.length - 1].content = prompt;
+  messages[messages.length - 1].content = prompt
 
-  const response = prompt;
+  const response = prompt
 
   const title = json.messages[0].content.substring(0, 100)
   const id = json.id ?? nanoid()
@@ -151,5 +167,6 @@ export async function POST(req: Request) {
     member: `chat:${id}`
   })
 
+  // @ts-ignore-next-line
   return new StreamingTextResponse(response)
 }
