@@ -18,8 +18,6 @@ const configuration = new Configuration({
 
 const pinecone = new PineconeClient()
 
-const openai = new OpenAIApi(configuration)
-
 function sanitizeText(text: string) {
   const replacements: {
     [key: string]: string
@@ -139,11 +137,16 @@ export async function POST(req: Request) {
     prompt += '\n\n' // Separator between groups
   })
 
-  messages[messages.length - 1].content = prompt
+  const response = {
+    content: prompt,
+    role: 'assistant',
+    createdAt: Date.now(),
+  }
+  response.content = prompt
+  response.role = 'assistant'
+  messages.push(response)
 
-  const response = prompt
-
-  const title = json.messages[0].content.substring(65, 120)
+  const title = json.messages[0].content.substring(0, 100)
   const id = json.id ?? nanoid()
   const createdAt = Date.now()
   const path = `/chat/${id}`
@@ -153,13 +156,7 @@ export async function POST(req: Request) {
     userId,
     createdAt,
     path,
-    messages: [
-      ...messages,
-      {
-        content: response,
-        role: 'assistant'
-      }
-    ]
+    messages: messages,
   }
   await kv.hmset(`chat:${id}`, payload)
   await kv.zadd(`user:chat:${userId}`, {
@@ -168,5 +165,5 @@ export async function POST(req: Request) {
   })
 
   // @ts-ignore-next-line
-  return new StreamingTextResponse(response)
+  return new StreamingTextResponse(response.content)
 }
