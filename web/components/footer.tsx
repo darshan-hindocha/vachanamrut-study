@@ -13,7 +13,7 @@ export function FooterText({ className, ...props }: React.ComponentProps<'p'>) {
       {...props}
     >
       Beta AI search engine. Share your feedback{' '}
-      <ExternalLink href="https://forms.gle/php4RgfsMdiq3WZWA">here</ExternalLink>
+      <ExternalLink href="https://docs.google.com/forms/d/e/1FAIpQLSf_i9xhciA26q_4YaXVf8Hs6Dt4L9lmGxt-KwDLy6ZcOwpqlA/viewform?usp=sf_link">here</ExternalLink>
     </p>
   )
 }
