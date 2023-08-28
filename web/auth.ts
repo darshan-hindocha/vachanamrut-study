@@ -1,5 +1,6 @@
 import NextAuth, { type DefaultSession } from 'next-auth'
 import GitHub from 'next-auth/providers/github'
+import Google from 'next-auth/providers/google'
 
 declare module 'next-auth' {
   interface Session {
@@ -15,7 +16,7 @@ export const {
   auth,
   CSRF_experimental // will be removed in future
 } = NextAuth({
-  providers: [GitHub],
+  providers: [GitHub, Google],
   callbacks: {
     jwt({ token, profile }) {
       if (profile) {
@@ -23,6 +24,12 @@ export const {
         token.image = profile.picture
       }
       return token
+    },
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.sub as string;
+      }
+      return session
     },
     authorized({ auth }) {
       return !!auth?.user // this ensures there is a logged in user for -every- request

@@ -1,5 +1,5 @@
 import { kv } from '@vercel/kv'
-import { OpenAIStream, StreamingTextResponse } from 'ai'
+import { OpenAIStream, StreamingTextResponse, } from 'ai'
 import { Configuration, OpenAIApi } from 'openai-edge'
 
 import { auth } from '@/auth'
@@ -21,6 +21,29 @@ const pinecone = new PineconeClient();
 
 
 const openai = new OpenAIApi(configuration);
+
+
+function sanitizeText(text) {
+  const replacements = {
+    'ā': 'a',
+    'ī': 'i',
+    'ū': 'u',
+    'ē': 'e',
+    'ō': 'o',
+    'ṃ': 'm',
+    'ṇ': 'n',
+    'ṛ': 'r',
+    'ṣ': 's',
+    'ś': 's',
+    'ṭ': 't',
+    'ḍ': 'd',
+    'ḥ': 'h',
+    'ḷ': 'l'
+    // Add more as needed
+  };
+
+  return text.replace(/ā|ī|ū|ē|ō|ṃ|ṇ|ṛ|ṣ|ś|ṭ|ḍ|ḥ|ḷ/g, match => replacements[match]);
+}
 
 export async function POST(req: Request) {
   const [json, _] = await Promise.all([
@@ -52,71 +75,81 @@ export async function POST(req: Request) {
     { pineconeIndex }
   );
 
-  const similaritySearchResults = await vectorStore.similaritySearchWithScore(messages[messages.length - 1].content, 3)
+  const similaritySearchResults = await vectorStore.similaritySearchWithScore(messages[messages.length - 1].content, 10)
     .then((result) => {
       return result;
     });
 
   // Multi-string prompt
-  let prompt = `
-    Respond by saying "Here are the most results I found for your query:"
-    Clean up the results. If there are gaps between words in the results then remove the gaps.
-    Re-title the results to represent the results.
-    If the document text doesn't make sense then rewrite it to make sense with as little changes as possible.
-    Embolden the part of the extract that has the most similarity to the query.
-    
-    Results:
-  `;
+  let prompt = "Here are the most relevant results I found for your query:\n\n";
 
-  // Loop through the document responses to list out the results and their sources
+  // Group data by metadata.title
+  const groupedByTitle: {
+    [title: string]: [any, number][];
+  } = similaritySearchResults.reduce((acc, [item, score]) => {
+    const title = item.metadata.title;
+    if (!acc[title]) {
+      acc[title] = [];
+    }
+    acc[title].push([item, score]);
+    return acc;
+  }, {});
 
-  similaritySearchResults.forEach((document, index) => {
+  // Sort each group by metadata.paragraph
+  Object.keys(groupedByTitle).forEach((title) => {
+    groupedByTitle[title].sort((a, b) => {
+      return a[0].metadata.paragraph - b[0].metadata.paragraph;
+    });
+  });
 
-    prompt += `
-        **${index + 1}: ${document[0].metadata?.title ?? "No Title Found"}** \n 
-        ${document[1] > 0.6 ? "High" : "Low"} Confidence \n
-        Extract: ${document[0].pageContent}
-        \n
-      `;
+  let uniqueTextSet = new Set();
 
+  // Iterate over each title group
+  Object.keys(groupedByTitle).forEach((title, groupIndex) => {
+    prompt += "#### " + groupedByTitle[title][0][0]?.metadata?.vachanamrut_number + ": " + title.replaceAll("\n", " ") + "\n";
+
+    // Iterate over each document in the title group
+    groupedByTitle[title].forEach((document, index) => {
+      const pageContent = document[0].pageContent;
+      const sanitizedContent = sanitizeText(pageContent);
+      if (!uniqueTextSet.has(sanitizedContent)) {
+        prompt += " - **[p. " + document[0].metadata?.paragraph + "]** " + (
+          (document[1] < 0.6) ? "(Low relevance) " : ""
+        ) + document[0].pageContent + "\n\n";
+      }
+      uniqueTextSet.add(sanitizedContent);
+    });
+
+    prompt += '\n\n'; // Separator between groups
   });
 
   messages[messages.length - 1].content = prompt;
 
-  const res = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo',
-    messages,
-    temperature: 0.2,
-    stream: true
-  })
+  const response = prompt;
 
-  const stream = OpenAIStream(res, {
-    async onCompletion(completion) {
-      const title = json.messages[0].content.substring(0, 100)
-      const id = json.id ?? nanoid()
-      const createdAt = Date.now()
-      const path = `/chat/${id}`
-      const payload = {
-        id,
-        title,
-        userId,
-        createdAt,
-        path,
-        messages: [
-          ...messages,
-          {
-            content: completion,
-            role: 'assistant'
-          }
-        ]
+  const title = json.messages[0].content.substring(0, 100)
+  const id = json.id ?? nanoid()
+  const createdAt = Date.now()
+  const path = `/chat/${id}`
+  const payload = {
+    id,
+    title,
+    userId,
+    createdAt,
+    path,
+    messages: [
+      ...messages,
+      {
+        content: response,
+        role: 'assistant'
       }
-      await kv.hmset(`chat:${id}`, payload)
-      await kv.zadd(`user:chat:${userId}`, {
-        score: createdAt,
-        member: `chat:${id}`
-      })
-    }
+    ]
+  }
+  await kv.hmset(`chat:${id}`, payload)
+  await kv.zadd(`user:chat:${userId}`, {
+    score: createdAt,
+    member: `chat:${id}`
   })
 
-  return new StreamingTextResponse(stream)
+  return new StreamingTextResponse(response)
 }
