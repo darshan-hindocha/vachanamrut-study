@@ -1,50 +1,72 @@
 'use server'
 
+import { Db, MongoClient, ObjectId } from 'mongodb'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { kv } from '@vercel/kv'
-
 import { auth } from '@/auth'
 import { type Chat } from '@/lib/types'
 
-export async function getChats(userId?: string | null) {
+let db: Db
+
+// Initialize MongoDB client and database
+const initDb = async () => {
+  if (db) {
+    return
+  }
+  const client = await MongoClient.connect(process.env.MONGODB_URI ?? '')
+  db = client.db(process.env.MONGODB_NAME)
+}
+
+export async function getChats(userId: string | null) {
+  await initDb()
+
   if (!userId) {
     return []
   }
 
   try {
-    const pipeline = kv.pipeline()
-    const chats: string[] = await kv.zrange(`user:chat:${userId}`, 0, -1, {
-      rev: true
+    const chats = await db
+      .collection('chats')
+      .find({ userId: new ObjectId(userId) })
+      .sort({ createdAt: -1 })
+      .toArray()
+    return chats.map(chat => {
+      return {
+        ...chat,
+        _id: chat._id.toString(),
+        userId: chat.userId.toString()
+      } as Chat
     })
-
-    for (const chat of chats) {
-      pipeline.hgetall(chat)
-    }
-
-    const results = await pipeline.exec()
-
-    return results as Chat[]
   } catch (error) {
+    console.error(
+      'Error in getChats for userId: ' + userId + ' and error:\n',
+      error
+    )
     return []
   }
 }
 
 export async function getChat(id: string, userId: string) {
-  const chat = await kv.hgetall<Chat>(`chat:${id}`)
-
-  if (
-    !chat ||
-    (userId &&
-      chat.userId.toString().slice(0, 16) !== userId?.toString().slice(0, 16))
-  ) {
+  await initDb()
+  console.log('running getChat with id: ' + id + ' and userId: ' + userId)
+  const chat = await db
+    .collection('chats')
+    .findOne({ _id: new ObjectId(id), userId: new ObjectId(userId) })
+  if (chat === null) {
+    console.error(
+      'could not find getChat for id: ' + id + ' and userId: ' + userId
+    )
     return null
   }
-
-  return chat
+  return {
+    ...chat,
+    _id: chat._id.toString(),
+    userId: chat.userId.toString()
+  } as Chat
 }
 
 export async function removeChat({ id, path }: { id: string; path: string }) {
+  await initDb()
   const session = await auth()
 
   if (!session) {
@@ -53,69 +75,58 @@ export async function removeChat({ id, path }: { id: string; path: string }) {
     }
   }
 
-  const uid = await kv.hget<string>(`chat:${id}`, 'userId')
-
-  if (
-    uid?.toString().slice(0, 16) !== session?.user.sub.toString().slice(0, 16)
-  ) {
-    return {
-      error: 'Unauthorized'
-    }
-  }
-
-  await kv.del(`chat:${id}`)
-  await kv.zrem(`user:chat:${session.user.sub}`, `chat:${id}`)
+  const collection = db.collection('chats')
+  console.log(
+    'running removeChat with id: ' + id + ' and userId: ' + session.user.id
+  )
+  await collection.deleteOne({
+    _id: new ObjectId(id),
+    userId: new ObjectId(session.user.id)
+  })
 
   revalidatePath('/')
   return revalidatePath(path)
 }
 
 export async function clearChats() {
+  await initDb()
   const session = await auth()
 
-  if (!session?.user?.sub) {
+  if (!session?.user?.id) {
     return {
       error: 'Unauthorized'
     }
   }
 
-  const chats: string[] = await kv.zrange(
-    `user:chat:${session.user.sub}`,
-    0,
-    -1
-  )
-  if (!chats.length) {
-    return redirect('/')
-  }
-  const pipeline = kv.pipeline()
-
-  for (const chat of chats) {
-    pipeline.del(chat)
-    pipeline.zrem(`user:chat:${session.user.sub}`, chat)
-  }
-
-  await pipeline.exec()
+  const collection = db.collection('chats')
+  console.log('running clearChats with userId: ' + session.user.id)
+  await collection.deleteMany({ userId: new ObjectId(session.user.id) })
 
   revalidatePath('/')
   return redirect('/')
 }
 
 export async function getSharedChat(id: string) {
-  const chat = await kv.hgetall<Chat>(`chat:${id}`)
-
-  if (!chat || !chat.sharePath) {
-    return null
-  }
-
-  return chat
+  await initDb()
+  const collection = db.collection('chats')
+  return await collection.findOne({
+    _id: new ObjectId(id),
+    sharePath: { $exists: true }
+  })
 }
 
 export async function shareChat(chat: Chat) {
+  await initDb()
   const session = await auth()
+  if (typeof chat._id !== 'string') {
+    chat._id = chat._id.toString()
+  }
 
   if (
-    !session.user.sub ||
-    session.user.sub.toString().slice(0, 15) !==
+    !session ||
+    !chat.userId ||
+    !session.user.id ||
+    session.user.id.toString().slice(0, 15) !==
       chat.userId.toString().slice(0, 15)
   ) {
     return {
@@ -123,12 +134,19 @@ export async function shareChat(chat: Chat) {
     }
   }
 
-  const payload = {
+  const collection = db.collection('chats')
+  const updatedChat = {
     ...chat,
-    sharePath: `/share/${chat.id}`
+    sharePath: `/share/${chat._id}`
   }
 
-  await kv.hmset(`chat:${chat.id}`, payload)
-
-  return payload
+  await collection.updateOne(
+    { _id: new ObjectId(chat._id as string) },
+    {
+      $set: {
+        sharePath: updatedChat.sharePath
+      }
+    }
+  )
+  return updatedChat
 }

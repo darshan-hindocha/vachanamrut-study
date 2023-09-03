@@ -1,10 +1,11 @@
+import { ObjectId } from 'mongodb'
 import { type Message } from 'ai'
 
 export interface Chat extends Record<string, any> {
-  id: string
+  _id: ObjectId | string // Changed from 'id: string' to MongoDB's '_id: ObjectId'
   title: string
   createdAt: Date
-  userId: string
+  userId: ObjectId | string // Changed from 'userId: string' to 'userId: ObjectId'
   path: string
   messages: Message[]
   sharePath?: string

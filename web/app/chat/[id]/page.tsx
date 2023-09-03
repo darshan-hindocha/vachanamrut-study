@@ -1,12 +1,12 @@
+'use server'
+
 import { type Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 
 import { auth } from '@/auth'
 import { getChat } from '@/app/actions'
 import { Chat } from '@/components/chat'
-
-export const runtime = 'edge'
-export const preferredRegion = 'home'
+import { Chat as ChatType } from '@/lib/types'
 
 export interface ChatPageProps {
   params: {
@@ -23,7 +23,7 @@ export async function generateMetadata({
     return {}
   }
 
-  const chat = await getChat(params.id, session.user.sub)
+  const chat: ChatType | null = await getChat(params.id, session.user.id)
   return {
     title: chat?.title.toString().slice(0, 50) ?? 'Chat'
   }
@@ -36,18 +36,17 @@ export default async function ChatPage({ params }: ChatPageProps) {
     redirect(`/sign-in?next=/chat/${params.id}`)
   }
 
-  const chat = await getChat(params.id, session.user.sub)
+  const chat: ChatType | null = await getChat(params.id, session.user.id)
 
   if (!chat) {
+    // TODO redirect('/chat') and show toast
     notFound()
   }
 
-  if (
-    chat?.userId.toString().slice(0, 16) !==
-    session.user.sub.toString().slice(0, 16)
-  ) {
+  if (chat?.userId !== session.user.id) {
+    // TODO redirect('/chat') and show toast
     notFound()
   }
 
-  return <Chat id={chat.id} initialMessages={chat.messages} />
+  return <Chat id={chat._id as string} initialMessages={chat.messages} />
 }

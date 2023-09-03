@@ -1,10 +1,10 @@
-import { nanoid } from '@/lib/utils'
+'use server'
+
 import { Chat } from '@/components/chat'
+import { ObjectId } from 'mongodb'
 
-export const runtime = 'edge'
+export default async function IndexPage() {
+  const id = new ObjectId()
 
-export default function IndexPage() {
-  const id = nanoid()
-
-  return <Chat id={id} />
+  return <Chat id={id.toString()} />
 }

@@ -1,16 +1,25 @@
-import { kv } from '@vercel/kv'
+'use server'
+
+import { Db, MongoClient, ObjectId } from 'mongodb'
 import { StreamingTextResponse } from 'ai'
-import { Configuration, OpenAIApi } from 'openai-edge'
+import { Configuration } from 'openai-edge'
 
 import { auth } from '@/auth'
-import { nanoid } from '@/lib/utils'
 
 import { OpenAIEmbeddings } from 'langchain/embeddings/openai'
 import { PineconeStore } from 'langchain/vectorstores/pinecone'
 
 import { PineconeClient } from '@pinecone-database/pinecone'
 
-export const runtime = 'edge'
+let db: Db
+
+// Initialize MongoDB client and database
+const initDb = async () => {
+  const client = await MongoClient.connect(process.env.MONGODB_URI ?? '')
+  db = client.db(process.env.MONGODB_NAME)
+}
+
+initDb()
 
 const configuration = new Configuration({
   apiKey: process.env.OPENAI_API_KEY
@@ -55,7 +64,7 @@ export async function POST(req: Request) {
     })
   ])
   const { messages, previewToken } = json
-  const userId = (await auth())?.user.sub
+  const userId = (await auth())?.user.id
 
   if (!userId) {
     return new Response('Unauthorized', {
@@ -147,22 +156,23 @@ export async function POST(req: Request) {
   messages.push(response)
 
   const title = json.messages[0].content.substring(0, 100)
-  const id = json.id ?? nanoid()
+  const _id = json._id ?? new ObjectId()
   const createdAt = Date.now()
-  const path = `/chat/${id}`
+  const path = `/chat/${_id}`
   const payload = {
-    id,
+    _id,
     title,
-    userId,
+    userId: new ObjectId(userId),
     createdAt,
     path,
     messages: messages
   }
-  await kv.hmset(`chat:${id}`, payload)
-  await kv.zadd(`user:chat:${userId}`, {
-    score: createdAt,
-    member: `chat:${id}`
-  })
+  await db
+    .collection('chats')
+    .updateOne({ _id: _id }, { $set: payload }, { upsert: true })
+  await db
+    .collection('users')
+    .updateOne({ _id: new ObjectId(userId) }, { $push: { chatIds: _id } })
 
   // @ts-ignore-next-line
   return new StreamingTextResponse(response.content)

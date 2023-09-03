@@ -1,13 +1,14 @@
 import { getChats, removeChat, shareChat } from '@/app/actions'
 import { SidebarActions } from '@/components/sidebar-actions'
 import { SidebarItem } from '@/components/sidebar-item'
+import { Chat } from '@/lib/types'
 
 export interface SidebarListProps {
   userId?: string
 }
 
 export async function SidebarList({ userId }: SidebarListProps) {
-  const chats = await getChats(userId)
+  const chats: Chat[] = await getChats(userId ?? null)
 
   return (
     <div className="flex-1 overflow-auto">
@@ -16,7 +17,7 @@ export async function SidebarList({ userId }: SidebarListProps) {
           {chats.map(
             chat =>
               chat && (
-                <SidebarItem key={chat?.id} chat={chat}>
+                <SidebarItem key={chat?._id as string} chat={chat}>
                   <SidebarActions
                     chat={chat}
                     removeChat={removeChat}

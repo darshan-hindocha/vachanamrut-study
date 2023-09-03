@@ -22,7 +22,7 @@ export function SidebarItem({ chat, children }: SidebarItemProps) {
   const pathname = usePathname()
   const isActive = pathname === chat.path
 
-  if (!chat?.id) return null
+  if (!chat?._id) return null
 
   return (
     <div className="relative">
