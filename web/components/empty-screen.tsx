@@ -6,12 +6,13 @@ import { IconArrowRight } from '@/components/ui/icons'
 
 const exampleMessages = [
   {
-    heading: 'Find Shriji Maharaj\'s definition of various concepts in satsang',
+    heading: "Find Shriji Maharaj's definition of various concepts in satsang",
     message: `What are the panchvishays?`
   },
   {
     heading: 'Curate a list of references from the Vachanamrut on a topic',
-    message: 'What did Shriji Maharaj say about the importance of gnan vs bhakti?'
+    message:
+      'What did Shriji Maharaj say about the importance of gnan vs bhakti?'
   },
   {
     heading: 'Find an exact quote from the Vachanamrut based on a description',

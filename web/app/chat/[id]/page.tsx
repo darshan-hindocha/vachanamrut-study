@@ -42,7 +42,10 @@ export default async function ChatPage({ params }: ChatPageProps) {
     notFound()
   }
 
-  if (chat?.userId.toString().slice(0, 16) !== (session.user.sub.toString().slice(0, 16))) {
+  if (
+    chat?.userId.toString().slice(0, 16) !==
+    session.user.sub.toString().slice(0, 16)
+  ) {
     notFound()
   }
 

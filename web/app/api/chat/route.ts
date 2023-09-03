@@ -140,7 +140,7 @@ export async function POST(req: Request) {
   const response = {
     content: prompt,
     role: 'assistant',
-    createdAt: Date.now(),
+    createdAt: Date.now()
   }
   response.content = prompt
   response.role = 'assistant'
@@ -156,7 +156,7 @@ export async function POST(req: Request) {
     userId,
     createdAt,
     path,
-    messages: messages,
+    messages: messages
   }
   await kv.hmset(`chat:${id}`, payload)
   await kv.zadd(`user:chat:${userId}`, {
